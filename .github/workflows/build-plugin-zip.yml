@@ -1,0 +1,55 @@
+name: Build QGIS plugin zip
+
+on:
+  push:
+    branches: [develop, main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Read plugin version from metadata.txt
+        id: version
+        run: |
+          version=$(grep -E '^version=' metadata.txt | head -n1 | cut -d'=' -f2 | tr -d '[:space:]')
+          if [ -z "$version" ]; then
+            echo "Could not read version= from metadata.txt" >&2
+            exit 1
+          fi
+          echo "value=${version}" >> "$GITHUB_OUTPUT"
+          echo "Plugin version: ${version}"
+
+      - name: Assemble plugin directory
+        run: |
+          mkdir -p build/wtyczka_qgis_app
+          rsync -a \
+            --exclude='.git' \
+            --exclude='.github' \
+            --exclude='.gitignore' \
+            --exclude='.gitattributes' \
+            --exclude='build' \
+            --exclude='__pycache__' \
+            --exclude='*.pyc' \
+            --exclude='*.pyo' \
+            ./ build/wtyczka_qgis_app/
+
+      - name: Create zip
+        id: zip
+        run: |
+          zip_name="wtyczka_app-${{ steps.version.outputs.value }}.zip"
+          (cd build && zip -qr "../${zip_name}" wtyczka_qgis_app)
+          ls -lh "${zip_name}"
+          echo "name=${zip_name}" >> "$GITHUB_OUTPUT"
+
+      - name: Upload plugin zip artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: wtyczka_app-${{ steps.version.outputs.value }}
+          path: ${{ steps.zip.outputs.name }}
+          if-no-files-found: error
+          retention-days: 90
